@@ -41,7 +41,7 @@ def generate_wordnet_format(word_id:int, syn_num:int, word:str, pos:str) ->str :
     Returns:
         str: wordnet format
     """
-    return f"s({word_id}, {syn_num}, '{word}', {pos}, 1, 0).\n"
+    return f"s({word_id},{syn_num},'{word}',{pos},1,0).\n"
 
 def generate_synset(syn_id:int, syn_list:list, stop_words:list, pos:str, lemma_c:str) -> str: 
     """Generate the wordnet list
@@ -68,6 +68,8 @@ def generate_synset(syn_id:int, syn_list:list, stop_words:list, pos:str, lemma_c
                         already_put.append(syn)
                         c+=1
                         synset += generate_wordnet_format(syn_id, c, syn, pos)
+    synset = synset[:-1]
+    synset += "\"\"\";\n"
     return synset
         
 
@@ -108,10 +110,10 @@ def syn_to_be_removed(syn, syn_list) :
 
 
 def extract_synonyms_to_file(lang:str="fra", stop_words:bool=True):
-    word_id = 1
+    word_id = 10000001
     stop_words=[]
     if(stop_words) : 
-       stop_words = open(f"stopword/stopword_{fra}.txt").read().splitlines()
+       stop_words = open(f"stopword/stopword_{lang}.txt").read().splitlines()
     
     with open(f'output/{lang}_synonyms_wordnet_format.txt', 'w', encoding='utf-8') as file:
         for lemma in wn.all_lemma_names(lang=lang):
