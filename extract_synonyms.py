@@ -3,6 +3,7 @@ from nltk.wsd import lesk
 from nltk.corpus import wordnet as wn
 import os
 from unidecode import unidecode
+import re
 
 print (os.getcwd())
 
@@ -10,6 +11,11 @@ print (os.getcwd())
 # 'fin', 'fra', 'fre', 'glg', 'heb', 'ind', 'ita', 'jpn', 'nno',
 # 'nob', 'pol', 'por', 'spa', 'tha', 'zsm']
 lang='fra'
+
+
+def word_cleaning(word:str)->str : 
+    word_c = re.sub(r'[^\w]', '', word)
+    return unidecode(word_c.lower()).replace('_', ' ')
 
 
 def get_synonyms(word:str, pos:str) -> list :
@@ -28,6 +34,18 @@ def get_synonyms(word:str, pos:str) -> list :
             synonyms.add(lemma)#.name())
     return synonyms
 
+def generate_solr_format(word:str, syn_list:list, stop_words:list) -> str :
+    already_put = []
+    synset =""
+    for syn in syn_list : 
+        if syn.name() not in stop_words : 
+            syn = word_cleaning(syn.name())
+            if (syn != word) :
+                if syn not in already_put :  
+                    if not syn_to_be_removed(syn, syn_list) :
+                        already_put.append(syn)
+                        synset += f"{word} => {syn}\n"
+    return synset
 
 def generate_wordnet_format(word_id:int, syn_num:int, word:str, pos:str) ->str :
     """Generate the wordnet format for the given parameters
@@ -41,7 +59,7 @@ def generate_wordnet_format(word_id:int, syn_num:int, word:str, pos:str) ->str :
     Returns:
         str: wordnet format
     """
-    return f"s({word_id},{syn_num},'{word}',{pos},1,0).\n"
+    return f"s({word_id}, {syn_num}, '{word}', {pos}, 1, 0).\n"
 
 def generate_synset(syn_id:int, syn_list:list, stop_words:list, pos:str, lemma_c:str) -> str: 
     """Generate the wordnet list
@@ -61,15 +79,13 @@ def generate_synset(syn_id:int, syn_list:list, stop_words:list, pos:str, lemma_c
     c=1
     for syn in syn_list : 
         if syn.name() not in stop_words : 
-            syn = unidecode(syn.name().lower())
+            syn = word_cleaning(syn)
             if (syn != lemma_c) :
                 if syn not in already_put :  
                     if not syn_to_be_removed(syn, syn_list) :
                         already_put.append(syn)
                         c+=1
                         synset += generate_wordnet_format(syn_id, c, syn, pos)
-    synset = synset[:-1]
-    synset += "\"\"\";\n"
     return synset
         
 
@@ -108,26 +124,29 @@ def syn_to_be_removed(syn, syn_list) :
     return False
 
 
-
-def extract_synonyms_to_file(lang:str="fra", stop_words:bool=True):
-    word_id = 10000001
+def extract_synonyms_to_file(format:str, lang:str="fra", stop_words:bool=True):
+    word_id = 1
     stop_words=[]
     if(stop_words) : 
-       stop_words = open(f"stopword/stopword_{lang}.txt").read().splitlines()
+       stop_words = open(f"stopword/stopword_{fra}.txt").read().splitlines()
     
-    with open(f'output/{lang}_synonyms_wordnet_format.txt', 'w', encoding='utf-8') as file:
+    with open(f'output/{lang}_synonyms_{format}_format.txt', 'w', encoding='utf-8') as file:
         for lemma in wn.all_lemma_names(lang=lang):
             if lemma not in stop_words:
                 pos_syn = wn.synsets(lemma, lang='fra')[0].pos()
                 synonyms = get_synonyms(lemma, pos_syn)
                 c = 1
-                lemma_c = unidecode(lemma.lower())
-                if len(synonyms) > 2  and len(synonyms) < 12 and pos_syn not in ['r', 's'] and not lemma_to_be_removed(lemma) :
-                    file.write(generate_wordnet_format(word_id, 1, lemma_c, pos_syn))
-                    file.write(generate_synset(word_id, synonyms, stop_words, pos_syn, lemma_c))
+                lemma_c = word_cleaning(lemma)
+                if len(lemma_c)>1 and len(synonyms) > 2  and len(synonyms) < 12 and pos_syn not in ['r', 's'] and not lemma_to_be_removed(lemma) :
+                    if(format == "solr") :
+                        file.write(f"{lemma_c} => {lemma_c}")
+                        file.write(generate_solr_format(lemma_c, synonyms, stop_words))
+                    else : 
+                        file.write(generate_wordnet_format(word_id, 1, lemma_c, pos_syn))
+                        file.write(generate_synset(word_id, synonyms, stop_words, pos_syn))
                     word_id += 1
                     
 #test_to_be_removed()
 
 #['le', 'la', 'de', 'et', 'à', 'est']
-extract_synonyms_to_file()
+extract_synonyms_to_file("solr")
